@@ -68,11 +68,13 @@ pip install -r requirements.txt
 python app.py
 ```
 
-或使用一键启动脚本（含 Docker、ADB 端口映射）：
+或使用一键启动脚本（Windows PowerShell，含 Docker、ADB 端口映射）：
 
 ```powershell
-./start-all.ps1
+.\start-all.ps1
 ```
+
+> **macOS / Linux 用户**：请手动执行 `docker-compose up -d` + `adb reverse tcp:5000 tcp:5000` + `python app.py`
 
 ### Android 客户端
 

@@ -5,8 +5,13 @@
 确保 **Docker Desktop** 已运行，手机通过 **USB 线**连接电脑并开启调试模式，然后执行：
 
 ```powershell
-cd C:\Users\Michael\AndroidStudioProjects\COMP7506_project
+# Windows PowerShell
 .\start-all.ps1
+
+# 如果使用 macOS / Linux，请手动执行以下步骤：
+# 1. docker-compose up -d
+# 2. adb reverse tcp:5000 tcp:5000
+# 3. cd backend && source .venv/bin/activate && python app.py
 ```
 
 这会同时完成三件事：
@@ -68,9 +73,15 @@ cd C:\Users\Michael\AndroidStudioProjects\COMP7506_project
 ## 常见错误
 
 ### ❌ "无法识别 adb"
+
 脚本会自动查找常见路径。如果失败，手动添加环境变量：
+
 ```powershell
-$env:PATH += ";C:\Users\$env:USERNAME\AppData\Local\Android\Sdk\platform-tools"
+# Windows PowerShell - 请根据实际 SDK 安装路径调整
+$env:PATH += ";$env:USERPROFILE\AppData\Local\Android\Sdk\platform-tools"
+
+# macOS / Linux - 添加到 ~/.bashrc 或 ~/.zshrc
+export PATH="$PATH:$HOME/Library/Android/sdk/platform-tools"
 ```
 
 ### ❌ "Docker 未运行"
@@ -88,14 +99,15 @@ Milvus 首次启动需要 1-2 分钟下载镜像。再次运行脚本即可。
 
 ## 停止服务
 
-```powershell
+```bash
 # 停止 Docker 数据库（会保留数据）
 docker-compose down
 
 # 完全删除数据库（包括向量数据）
 docker-compose down -v
-Remove-Item backend/notemind.db
+rm backend/notemind.db    # macOS / Linux
+# 或: Remove-Item backend/notemind.db    # Windows PowerShell
 
 # 停止后端
-# 直接关闭后端 PowerShell 窗口即可
+# 直接关闭后端终端窗口即可
 ```

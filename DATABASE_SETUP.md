@@ -13,16 +13,19 @@ NoteMind 使用两个数据库：
 
 ### 1. 一键启动
 
-在 PowerShell 中执行：
+在 PowerShell (Windows) 或 Terminal (macOS/Linux) 中执行：
 
 ```powershell
-cd C:\Users\Michael\AndroidStudioProjects\COMP7506_project
+# Windows PowerShell
 .\start-databases.ps1
+
+# macOS / Linux (使用 docker-compose)
+docker-compose up -d
 ```
 
 或手动用 Docker Compose：
 
-```powershell
+```bash
 docker-compose up -d
 ```
 
@@ -30,16 +33,22 @@ docker-compose up -d
 
 首次启动需要下载镜像，约 2-5 分钟：
 
-```powershell
+```bash
 # 查看日志，看到 "[INFO] [rootcoord/root_coord.go]..." 表示启动完成
 docker-compose logs -f milvus-standalone
 ```
 
 ### 3. 启动后端
 
-```powershell
+```bash
 cd backend
+
+# Windows (PowerShell)
 .venv\Scripts\activate
+
+# macOS / Linux
+source .venv/bin/activate
+
 python app.py
 ```
 
@@ -47,7 +56,7 @@ python app.py
 
 ### Milvus（向量数据库）
 
-```powershell
+```bash
 # 启动所有服务
 docker-compose up -d
 
@@ -97,14 +106,16 @@ curl http://localhost:5000/health
 1. 检查容器状态：`docker-compose ps`
 2. 查看日志：`docker-compose logs milvus-standalone`
 3. 等待完全启动：Milvus 需要 30-60 秒初始化
-4. 检查端口占用：`netstat -ano | findstr 19530`
+4. 检查端口占用：
+   - Windows: `netstat -ano | findstr 19530`
+   - macOS/Linux: `lsof -i :19530` 或 `netstat -tlnp | grep 19530`
 
 ### ❌ "Connection refused" 从手机连接
 
 确保：
 1. 后端 `app.py` 的 `host="0.0.0.0"`（监听所有接口）
 2. 手机通过 `adb reverse` 或局域网 IP 连接
-3. Windows 防火墙放行 5000 端口
+3. 防火墙放行 5000 端口
 
 ### ❌ Docker 启动失败
 
@@ -129,10 +140,14 @@ curl http://localhost:5000/health
 - **SQLite 数据**：`backend/notemind.db` 文件，随项目保存
 
 删除数据：
-```powershell
+
+```bash
 # 仅删 Milvus 向量数据
 docker-compose down -v
 
 # 删 SQLite 数据（会丢失所有会话和笔记）
+# Windows (PowerShell)
 Remove-Item backend/notemind.db
+# macOS / Linux
+rm backend/notemind.db
 ```
