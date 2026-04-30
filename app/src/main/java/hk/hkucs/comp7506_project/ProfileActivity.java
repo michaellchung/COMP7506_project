@@ -3,6 +3,7 @@ package hk.hkucs.comp7506_project;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.widget.ImageButton;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -11,15 +12,24 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 
+import java.util.Locale;
+
+import hk.hkucs.comp7506_project.data.BackendConfig;
 import hk.hkucs.comp7506_project.data.SessionManager;
 
 public class ProfileActivity extends AppCompatActivity {
 
-    private static final String PREFS_PROFILE = "notemind_profile";
-    private static final String DEFAULT_BACKEND_URL = "http://127.0.0.1:5000";
+    private static final String PREFS_PROFILE = BackendConfig.PREFS;
+
+    /** Monthly token budget for the progress bar visualisation. */
+    private static final long TOKEN_BUDGET = 1_000_000L;
 
     private TextInputEditText inputDisplayName;
     private TextInputEditText inputEmail;
@@ -30,8 +40,11 @@ public class ProfileActivity extends AppCompatActivity {
     private TextView usageMessages;
     private TextView usageTokens;
     private TextView usageSessions;
+    private TextView usageBudgetLabel;
+    private ProgressBar usageProgressBar;
 
     private SharedPreferences prefs;
+    private RequestQueue requestQueue;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -45,27 +58,38 @@ public class ProfileActivity extends AppCompatActivity {
         });
 
         prefs = getSharedPreferences(PREFS_PROFILE, MODE_PRIVATE);
+        requestQueue = Volley.newRequestQueue(this);
+
         bindViews();
         loadProfile();
         bindActions();
+        fetchUsage();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        fetchUsage();
     }
 
     private void bindViews() {
-        inputDisplayName = findViewById(R.id.inputDisplayName);
-        inputEmail = findViewById(R.id.inputEmail);
-        inputBackendUrl = findViewById(R.id.inputBackendUrl);
-        displayName = findViewById(R.id.displayName);
-        displayEmail = findViewById(R.id.displayEmail);
-        avatarCircle = findViewById(R.id.avatarCircle);
-        usageMessages = findViewById(R.id.usageMessages);
-        usageTokens = findViewById(R.id.usageTokens);
-        usageSessions = findViewById(R.id.usageSessions);
+        inputDisplayName  = findViewById(R.id.inputDisplayName);
+        inputEmail        = findViewById(R.id.inputEmail);
+        inputBackendUrl   = findViewById(R.id.inputBackendUrl);
+        displayName       = findViewById(R.id.displayName);
+        displayEmail      = findViewById(R.id.displayEmail);
+        avatarCircle      = findViewById(R.id.avatarCircle);
+        usageMessages     = findViewById(R.id.usageMessages);
+        usageTokens       = findViewById(R.id.usageTokens);
+        usageSessions     = findViewById(R.id.usageSessions);
+        usageBudgetLabel  = findViewById(R.id.usageBudgetLabel);
+        usageProgressBar  = findViewById(R.id.usageProgressBar);
     }
 
     private void loadProfile() {
-        String name = prefs.getString("display_name", "Student");
+        String name  = prefs.getString("display_name", "Student");
         String email = prefs.getString("email", "hku@connect.hku.hk");
-        String url = normalizeBackendUrl(prefs.getString("backend_url", DEFAULT_BACKEND_URL));
+        String url   = BackendConfig.normalize(prefs.getString("backend_url", BackendConfig.DEFAULT_BACKEND));
 
         inputDisplayName.setText(name);
         inputEmail.setText(email);
@@ -74,13 +98,46 @@ public class ProfileActivity extends AppCompatActivity {
         displayEmail.setText(email);
         avatarCircle.setText(initials(name));
 
-        int msgs = prefs.getInt("usage_messages", 0);
-        int tokens = prefs.getInt("usage_tokens", 0);
-        int sessionCount = new SessionManager(this).loadSessions().size();
+        // Initialize with cached values; backend fetch will override.
+        usageMessages.setText(String.valueOf(prefs.getInt("usage_messages", 0)));
+        usageTokens.setText(formatNumber(prefs.getInt("usage_tokens", 0)));
+        usageSessions.setText(String.valueOf(new SessionManager(this).loadSessions().size()));
+        applyTokenProgress(prefs.getInt("usage_tokens", 0));
+    }
 
-        usageMessages.setText(String.valueOf(msgs));
-        usageTokens.setText(String.valueOf(tokens));
-        usageSessions.setText(String.valueOf(sessionCount));
+    private void fetchUsage() {
+        String url = BackendConfig.getUrl(this) + "/api/profile/usage";
+        JsonObjectRequest req = new JsonObjectRequest(
+                Request.Method.GET, url, null,
+                response -> {
+                    int requests = response.optInt("total_requests", 0);
+                    long tokens  = response.optLong("total_tokens", 0L);
+                    int sessions = response.optInt("total_sessions", 0);
+
+                    usageMessages.setText(String.valueOf(requests));
+                    usageTokens.setText(formatNumber(tokens));
+                    if (sessions > 0) usageSessions.setText(String.valueOf(sessions));
+                    applyTokenProgress(tokens);
+
+                    prefs.edit()
+                            .putInt("usage_messages", requests)
+                            .putInt("usage_tokens", (int) Math.min(tokens, Integer.MAX_VALUE))
+                            .apply();
+                },
+                error -> { /* Keep cached values silently */ });
+        requestQueue.add(req);
+    }
+
+    private void applyTokenProgress(long tokens) {
+        int pct = (int) Math.min(100, Math.round(tokens * 100.0 / TOKEN_BUDGET));
+        usageProgressBar.setProgress(pct);
+        usageBudgetLabel.setText(formatNumber(tokens) + " / 1M");
+    }
+
+    private static String formatNumber(long n) {
+        if (n >= 1_000_000) return String.format(Locale.US, "%.1fM", n / 1_000_000.0);
+        if (n >= 1_000)     return String.format(Locale.US, "%.1fK", n / 1_000.0);
+        return String.valueOf(n);
     }
 
     private void bindActions() {
@@ -92,20 +149,21 @@ public class ProfileActivity extends AppCompatActivity {
     }
 
     private void saveProfile() {
-        String name = text(inputDisplayName);
+        String name  = text(inputDisplayName);
         String email = text(inputEmail);
-        String url = text(inputBackendUrl);
+        String url   = text(inputBackendUrl);
 
         prefs.edit()
                 .putString("display_name", name)
                 .putString("email", email)
-                .putString("backend_url", normalizeBackendUrl(url))
+                .putString("backend_url", BackendConfig.normalize(url))
                 .apply();
 
         displayName.setText(name);
         displayEmail.setText(email);
         avatarCircle.setText(initials(name));
         Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+        fetchUsage();
     }
 
     private String text(TextInputEditText et) {
@@ -114,16 +172,5 @@ public class ProfileActivity extends AppCompatActivity {
 
     private String initials(String name) {
         return name.isEmpty() ? "U" : String.valueOf(name.charAt(0)).toUpperCase();
-    }
-
-    private String normalizeBackendUrl(String url) {
-        String normalized = url == null || url.trim().isEmpty() ? DEFAULT_BACKEND_URL : url.trim();
-        if (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        if ("http://10.0.2.2:5000".equals(normalized)) {
-            normalized = DEFAULT_BACKEND_URL;
-        }
-        return normalized;
     }
 }

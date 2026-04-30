@@ -8,8 +8,11 @@ OPENROUTER_BASE_URL: str = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.
 
 CHAT_MODEL: str = os.getenv("CHAT_MODEL", "openai/gpt-4o-mini")
 OCR_MODEL: str = os.getenv("OCR_MODEL", "openai/gpt-4o")
-TRANSCRIPTION_MODEL: str = os.getenv("TRANSCRIPTION_MODEL", "openai/whisper-large-v3")
 EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "openai/text-embedding-3-small")
+
+# Transcription is done through OpenRouter chat-completions with an
+# audio-input-capable model. The audio is sent as base64 mp3.
+TRANSCRIPTION_MODEL: str = os.getenv("TRANSCRIPTION_MODEL", "openai/gpt-4o-mini-audio-preview")
 
 MILVUS_HOST: str = os.getenv("MILVUS_HOST", "localhost")
 MILVUS_PORT: int = int(os.getenv("MILVUS_PORT", "19530"))

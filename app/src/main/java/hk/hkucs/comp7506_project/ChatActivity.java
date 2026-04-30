@@ -1,5 +1,7 @@
 package hk.hkucs.comp7506_project;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
@@ -7,7 +9,9 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
@@ -26,6 +30,7 @@ import org.json.JSONObject;
 
 import java.util.List;
 
+import hk.hkucs.comp7506_project.data.BackendConfig;
 import hk.hkucs.comp7506_project.data.SessionManager;
 import hk.hkucs.comp7506_project.model.ChatMessage;
 import hk.hkucs.comp7506_project.model.ChatSession;
@@ -33,7 +38,6 @@ import hk.hkucs.comp7506_project.ui.MessageAdapter;
 import hk.hkucs.comp7506_project.ui.SessionAdapter;
 
 public class ChatActivity extends AppCompatActivity {
-    private static final String DEFAULT_BACKEND_URL = "http://127.0.0.1:5000";
 
     private DrawerLayout drawerLayout;
     private TextView sessionTitleText;
@@ -57,8 +61,7 @@ public class ChatActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_chat);
 
-        SharedPreferences prefs = getSharedPreferences("notemind_profile", MODE_PRIVATE);
-        backendUrl = normalizeBackendUrl(prefs.getString("backend_url", DEFAULT_BACKEND_URL));
+        backendUrl   = BackendConfig.getUrl(this);
         requestQueue = Volley.newRequestQueue(this);
 
         sessionManager = new SessionManager(this);
@@ -69,12 +72,20 @@ public class ChatActivity extends AppCompatActivity {
         bindActions();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        backendUrl = BackendConfig.getUrl(this);
+    }
+
+    // ── View binding ──────────────────────────────────────────────────────────
+
     private void bindViews() {
-        drawerLayout = findViewById(R.id.drawerLayout);
-        sessionTitleText = findViewById(R.id.sessionTitleText);
+        drawerLayout         = findViewById(R.id.drawerLayout);
+        sessionTitleText     = findViewById(R.id.sessionTitleText);
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView);
         sessionsRecyclerView = findViewById(R.id.sessionsRecyclerView);
-        chatInput = findViewById(R.id.chatInput);
+        chatInput            = findViewById(R.id.chatInput);
     }
 
     private void initSessions() {
@@ -91,13 +102,21 @@ public class ChatActivity extends AppCompatActivity {
         msgLayoutManager = new LinearLayoutManager(this);
         msgLayoutManager.setStackFromEnd(true);
         messagesRecyclerView.setLayoutManager(msgLayoutManager);
-        messageAdapter = new MessageAdapter(currentSession.getMessages());
+        messageAdapter = newMessageAdapter(currentSession.getMessages());
         messagesRecyclerView.setAdapter(messageAdapter);
 
         sessionsRecyclerView.setLayoutManager(new LinearLayoutManager(this));
-        sessionAdapter = new SessionAdapter(sessions, session -> {
-            switchToSession(session);
-            drawerLayout.closeDrawers();
+        sessionAdapter = new SessionAdapter(sessions, new SessionAdapter.OnSessionClickListener() {
+            @Override
+            public void onSessionClick(ChatSession session) {
+                switchToSession(session);
+                drawerLayout.closeDrawers();
+            }
+
+            @Override
+            public void onSessionLongClick(ChatSession session) {
+                confirmDeleteSession(session);
+            }
         });
         sessionAdapter.setActiveSessionId(currentSession.getId());
         sessionsRecyclerView.setAdapter(sessionAdapter);
@@ -107,8 +126,8 @@ public class ChatActivity extends AppCompatActivity {
 
     private void bindActions() {
         ImageButton btnOpenDrawer = findViewById(R.id.btnOpenDrawer);
-        ImageButton btnNewChat = findViewById(R.id.btnNewChat);
-        ImageButton btnSend = findViewById(R.id.btnSend);
+        ImageButton btnNewChat    = findViewById(R.id.btnNewChat);
+        ImageButton btnSend       = findViewById(R.id.btnSend);
         MaterialButton btnNewChatDrawer = findViewById(R.id.btnNewChatDrawer);
 
         btnOpenDrawer.setOnClickListener(v -> drawerLayout.openDrawer(GravityCompat.START));
@@ -134,6 +153,8 @@ public class ChatActivity extends AppCompatActivity {
         });
     }
 
+    // ── Session management ────────────────────────────────────────────────────
+
     private void createNewSession() {
         ChatSession session = new ChatSession("New Chat");
         sessions.add(0, session);
@@ -145,12 +166,39 @@ public class ChatActivity extends AppCompatActivity {
     private void switchToSession(ChatSession session) {
         currentSession = session;
         sessionManager.setCurrentSessionId(session.getId());
-        messageAdapter = new MessageAdapter(currentSession.getMessages());
+        messageAdapter = newMessageAdapter(currentSession.getMessages());
         messagesRecyclerView.setAdapter(messageAdapter);
         if (sessionAdapter != null) sessionAdapter.setActiveSessionId(session.getId());
         updateTitleBar();
         scrollToBottom();
     }
+
+    /** Long-press on a session row — confirm before deleting. */
+    private void confirmDeleteSession(ChatSession session) {
+        new AlertDialog.Builder(this)
+                .setTitle("Delete conversation?")
+                .setMessage("\"" + session.getTitle() + "\" will be permanently removed.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete", (d, w) -> deleteSession(session))
+                .show();
+    }
+
+    private void deleteSession(ChatSession session) {
+        sessions.remove(session);
+        sessionManager.saveSessions(sessions);
+
+        if (session.getId().equals(currentSession.getId())) {
+            if (sessions.isEmpty()) {
+                createNewSession();
+            } else {
+                switchToSession(sessions.get(0));
+            }
+        }
+
+        if (sessionAdapter != null) sessionAdapter.notifyDataSetChanged();
+    }
+
+    // ── Messaging ─────────────────────────────────────────────────────────────
 
     private void sendMessage() {
         String text = chatInput.getText().toString().trim();
@@ -179,7 +227,7 @@ public class ChatActivity extends AppCompatActivity {
     private void callBackend(String question, ChatMessage aiMsg, int aiIndex) {
         try {
             JSONObject payload = new JSONObject();
-            payload.put("question", question);
+            payload.put("question",   question);
             payload.put("session_id", currentSession.getId());
 
             JsonObjectRequest req = new JsonObjectRequest(
@@ -197,8 +245,7 @@ public class ChatActivity extends AppCompatActivity {
                         aiMsg.setContent(buildConnectionErrorMessage(error));
                         messageAdapter.notifyItemChanged(aiIndex);
                         sessionManager.saveSessions(sessions);
-                    }
-            );
+                    });
             requestQueue.add(req);
         } catch (JSONException e) {
             aiMsg.setContent("Error preparing request.");
@@ -206,21 +253,25 @@ public class ChatActivity extends AppCompatActivity {
         }
     }
 
+    // ── Copy on long-press ────────────────────────────────────────────────────
+
+    private void copyToClipboard(String text) {
+        ClipboardManager cm = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("message", text));
+            Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private MessageAdapter newMessageAdapter(List<ChatMessage> msgs) {
+        return new MessageAdapter(msgs, this::copyToClipboard);
+    }
+
     private void updateTitleBar() {
         sessionTitleText.setText(currentSession.getTitle());
         if (sessionAdapter != null) sessionAdapter.notifyDataSetChanged();
-    }
-
-    private String normalizeBackendUrl(String url) {
-        String normalized = TextUtils.isEmpty(url) ? DEFAULT_BACKEND_URL : url.trim();
-        if (normalized.endsWith("/")) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        // 10.0.2.2 only works on Android Emulator. USB real-device debugging uses adb reverse.
-        if ("http://10.0.2.2:5000".equals(normalized)) {
-            normalized = DEFAULT_BACKEND_URL;
-        }
-        return normalized;
     }
 
     private String buildConnectionErrorMessage(VolleyError error) {

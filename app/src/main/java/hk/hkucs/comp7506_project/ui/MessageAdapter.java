@@ -15,10 +15,16 @@ import hk.hkucs.comp7506_project.model.ChatMessage;
 
 public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
-    private final List<ChatMessage> messages;
+    public interface OnMessageLongClickListener {
+        void onMessageLongClick(String content);
+    }
 
-    public MessageAdapter(List<ChatMessage> messages) {
+    private final List<ChatMessage> messages;
+    private final OnMessageLongClickListener longClickListener;
+
+    public MessageAdapter(List<ChatMessage> messages, OnMessageLongClickListener longClickListener) {
         this.messages = messages;
+        this.longClickListener = longClickListener;
     }
 
     @Override
@@ -39,21 +45,24 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
     @Override
     public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         String content = messages.get(position).getContent();
+        TextView bubble;
         if (holder instanceof UserVH) {
-            ((UserVH) holder).text.setText(content);
+            bubble = ((UserVH) holder).text;
         } else {
-            ((AiVH) holder).text.setText(content);
+            bubble = ((AiVH) holder).text;
         }
+        bubble.setText(content);
+        bubble.setOnLongClickListener(v -> {
+            if (longClickListener != null) longClickListener.onMessageLongClick(content);
+            return true;
+        });
     }
 
     @Override
-    public int getItemCount() {
-        return messages.size();
-    }
+    public int getItemCount() { return messages.size(); }
 
     static class UserVH extends RecyclerView.ViewHolder {
         final TextView text;
-
         UserVH(@NonNull View v) {
             super(v);
             text = v.findViewById(R.id.messageText);
@@ -62,7 +71,6 @@ public class MessageAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder
 
     static class AiVH extends RecyclerView.ViewHolder {
         final TextView text;
-
         AiVH(@NonNull View v) {
             super(v);
             text = v.findViewById(R.id.messageText);

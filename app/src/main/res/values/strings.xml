@@ -1,14 +1,67 @@
 <resources>
     <string name="app_name">NoteMind</string>
     <string name="app_tagline">AI-powered smart learning assistant</string>
-    <string name="home_intro">Turn English lecture recordings, slide photos, and personal notes into structured summaries and searchable knowledge.</string>
-    <string name="recording_module">Recording Summary</string>
-    <string name="ocr_module">Photo-to-Text OCR</string>
-    <string name="kb_module">Knowledge Q&amp;A</string>
-    <string name="library_module">Notes Library</string>
+
+    <!-- Home / Courses -->
+    <string name="my_courses">My Courses</string>
+    <string name="home_intro">Organise your study materials by course. Each course holds your lectures, recordings, photos, and notes.</string>
+    <string name="new_course">New Course</string>
+    <string name="no_courses_yet">No courses yet.\nTap + to create your first course.</string>
+    <string name="lectures_count">%1$d lectures</string>
+    <string name="lecture_count_one">1 lecture</string>
+    <string name="lecture_count_zero">No lectures yet</string>
+
+    <!-- Course detail -->
+    <string name="course_overview">Course Overview</string>
+    <string name="course_schedule">Schedule</string>
+    <string name="course_lectures">Lectures</string>
+    <string name="new_lecture">New Lecture</string>
+    <string name="no_lectures_yet">No lectures yet.\nAdd your first lecture for this course.</string>
+    <string name="delete_course">Delete Course</string>
+    <string name="confirm_delete_course">Delete this course and all its lectures and notes?</string>
+
+    <!-- Lecture detail -->
+    <string name="lecture_actions">Capture</string>
+    <string name="lecture_notes">Notes for this lecture</string>
+    <string name="no_lecture_notes">No notes yet.\nRecord, scan, or upload to capture this lecture.</string>
+    <string name="delete_lecture">Delete Lecture</string>
+    <string name="confirm_delete_lecture">Delete this lecture and its notes?</string>
+    <string name="lecture_number_format">Lecture %1$d</string>
+
+    <!-- Dialogs -->
+    <string name="dialog_course_title_hint">Course title (e.g. COMP7506)</string>
+    <string name="dialog_course_desc_hint">Description (optional)</string>
+    <string name="dialog_course_schedule_hint">Schedule (e.g. Mon 10–12)</string>
+    <string name="dialog_lecture_title_hint">Lecture title (optional)</string>
+    <string name="dialog_lecture_date_hint">Date (yyyy-MM-dd)</string>
+    <string name="action_create">Create</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+
+    <!-- Capture actions -->
+    <string name="actions_label">Actions</string>
+    <string name="start_recording">Start Recording</string>
+    <string name="stop_recording">Stop</string>
+    <string name="upload_audio">Upload Audio</string>
+    <string name="take_photo">Take Photo</string>
+    <string name="pick_image">Gallery</string>
+    <string name="upload_file">Upload PDF / PPT</string>
+    <string name="processing">Processing…</string>
+    <string name="recording_in_progress">Recording…</string>
+    <string name="result_title">Latest Result</string>
+
+    <!-- Notes -->
+    <string name="recent_notes">Recent Notes</string>
+    <string name="see_all">See All</string>
+    <string name="no_notes_yet">Upload recordings, photos, or files to\nbuild your knowledge base.</string>
+    <string name="note_detail_title">Note Detail</string>
+    <string name="source_recording">Recording</string>
+    <string name="source_ocr">OCR</string>
+    <string name="source_ppt">PPT</string>
+    <string name="source_note">Note</string>
+
+    <!-- Chat / Profile -->
     <string name="chat_module">AI Study Chat</string>
-    <string name="selected_module">Selected Module</string>
-    <string name="demo_result">Demo Result</string>
     <string name="ask_placeholder">Ask about your own notes, e.g. What is dynamic programming?</string>
     <string name="ask_notemind">Ask NoteMind</string>
     <string name="new_chat">New Chat</string>

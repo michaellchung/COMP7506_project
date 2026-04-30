@@ -5,19 +5,41 @@ DB_PATH = Path(__file__).with_name("notemind.db")
 
 
 def get_connection():
-    return sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 
 def init_db():
     with get_connection() as conn:
         conn.executescript(
             """
+            CREATE TABLE IF NOT EXISTS courses (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT NOT NULL,
+                description TEXT,
+                schedule    TEXT,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS lectures (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                course_id       INTEGER NOT NULL,
+                lecture_number  INTEGER NOT NULL,
+                title           TEXT,
+                lecture_date    TEXT,
+                created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE CASCADE
+            );
+
             CREATE TABLE IF NOT EXISTS notes (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 source_type TEXT NOT NULL,
                 title       TEXT NOT NULL,
                 content     TEXT NOT NULL,
-                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                lecture_id  INTEGER,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (lecture_id) REFERENCES lectures(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS chat_sessions (
@@ -46,19 +68,217 @@ def init_db():
             );
             """
         )
+        # Best-effort migration: add lecture_id to existing notes table
+        try:
+            conn.execute("ALTER TABLE notes ADD COLUMN lecture_id INTEGER")
+        except sqlite3.OperationalError:
+            pass
+        conn.commit()
+
+
+# ── Courses ──────────────────────────────────────────────────────────────────
+
+def create_course(title: str, description: str = "", schedule: str = "") -> int:
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO courses (title, description, schedule) VALUES (?, ?, ?)",
+            (title, description, schedule),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def list_courses() -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT c.id, c.title, c.description, c.schedule, c.created_at,
+                   (SELECT COUNT(*) FROM lectures l WHERE l.course_id = c.id) AS lecture_count
+            FROM courses c
+            ORDER BY c.created_at DESC
+            """
+        ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "title": r[1],
+            "description": r[2] or "",
+            "schedule": r[3] or "",
+            "created_at": str(r[4]),
+            "lecture_count": r[5] or 0,
+        }
+        for r in rows
+    ]
+
+
+def get_course(course_id: int):
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, title, description, schedule, created_at FROM courses WHERE id=?",
+            (course_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "title": row[1],
+        "description": row[2] or "",
+        "schedule": row[3] or "",
+        "created_at": str(row[4]),
+    }
+
+
+def delete_course(course_id: int):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM courses WHERE id=?", (course_id,))
+        conn.commit()
+
+
+# ── Lectures ─────────────────────────────────────────────────────────────────
+
+def create_lecture(course_id: int, title: str = "", lecture_date: str = "") -> dict:
+    with get_connection() as conn:
+        next_num = conn.execute(
+            "SELECT COALESCE(MAX(lecture_number), 0) + 1 FROM lectures WHERE course_id=?",
+            (course_id,),
+        ).fetchone()[0]
+        cur = conn.execute(
+            "INSERT INTO lectures (course_id, lecture_number, title, lecture_date) VALUES (?, ?, ?, ?)",
+            (course_id, next_num, title or f"Lecture {next_num}", lecture_date),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    return {
+        "id": new_id,
+        "course_id": course_id,
+        "lecture_number": next_num,
+        "title": title or f"Lecture {next_num}",
+        "lecture_date": lecture_date,
+    }
+
+
+def list_lectures(course_id: int) -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT l.id, l.course_id, l.lecture_number, l.title, l.lecture_date, l.created_at,
+                   (SELECT COUNT(*) FROM notes n WHERE n.lecture_id = l.id) AS note_count
+            FROM lectures l
+            WHERE l.course_id = ?
+            ORDER BY l.lecture_number DESC
+            """,
+            (course_id,),
+        ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "course_id": r[1],
+            "lecture_number": r[2],
+            "title": r[3] or f"Lecture {r[2]}",
+            "lecture_date": r[4] or "",
+            "created_at": str(r[5]),
+            "note_count": r[6] or 0,
+        }
+        for r in rows
+    ]
+
+
+def get_lecture(lecture_id: int):
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT l.id, l.course_id, l.lecture_number, l.title, l.lecture_date, l.created_at,
+                   c.title AS course_title
+            FROM lectures l JOIN courses c ON c.id = l.course_id
+            WHERE l.id = ?
+            """,
+            (lecture_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "course_id": row[1],
+        "lecture_number": row[2],
+        "title": row[3] or f"Lecture {row[2]}",
+        "lecture_date": row[4] or "",
+        "created_at": str(row[5]),
+        "course_title": row[6],
+    }
+
+
+def delete_lecture(lecture_id: int):
+    with get_connection() as conn:
+        conn.execute("DELETE FROM lectures WHERE id=?", (lecture_id,))
         conn.commit()
 
 
 # ── Notes ────────────────────────────────────────────────────────────────────
 
-def save_note(source_type, title, content):
+def save_note(source_type, title, content, lecture_id: int | None = None):
     with get_connection() as conn:
         cursor = conn.execute(
-            "INSERT INTO notes (source_type, title, content) VALUES (?, ?, ?)",
-            (source_type, title, content),
+            "INSERT INTO notes (source_type, title, content, lecture_id) VALUES (?, ?, ?, ?)",
+            (source_type, title, content, lecture_id),
         )
         conn.commit()
         return cursor.lastrowid
+
+
+def list_notes_full(limit: int = 30) -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, source_type, title, content, lecture_id, created_at FROM notes ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "source_type": r[1],
+            "title": r[2],
+            "content": r[3],
+            "lecture_id": r[4],
+            "created_at": str(r[5]),
+        }
+        for r in rows
+    ]
+
+
+def list_notes_by_lecture(lecture_id: int) -> list:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, source_type, title, content, created_at FROM notes WHERE lecture_id=? ORDER BY created_at DESC",
+            (lecture_id,),
+        ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "source_type": r[1],
+            "title": r[2],
+            "content": r[3],
+            "lecture_id": lecture_id,
+            "created_at": str(r[4]),
+        }
+        for r in rows
+    ]
+
+
+def get_note_by_id(note_id: int):
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, source_type, title, content, lecture_id, created_at FROM notes WHERE id=?",
+            (note_id,),
+        ).fetchone()
+    if row:
+        return {
+            "id": row[0],
+            "source_type": row[1],
+            "title": row[2],
+            "content": row[3],
+            "lecture_id": row[4],
+            "created_at": str(row[5]),
+        }
+    return None
 
 
 def list_recent_notes(limit=5):
@@ -103,6 +323,12 @@ def delete_session(session_id: str):
 
 def save_chat_message(session_id: str, role: str, content: str):
     with get_connection() as conn:
+        # Ensure session row exists first (FK requirement); the Android client
+        # generates its own UUIDs without explicitly registering them.
+        conn.execute(
+            "INSERT OR IGNORE INTO chat_sessions (session_id, title) VALUES (?, ?)",
+            (session_id, "New Chat"),
+        )
         conn.execute(
             "INSERT INTO chat_messages (session_id, role, content) VALUES (?, ?, ?)",
             (session_id, role, content),

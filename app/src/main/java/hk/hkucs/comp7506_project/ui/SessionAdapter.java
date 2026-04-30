@@ -17,6 +17,7 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
 
     public interface OnSessionClickListener {
         void onSessionClick(ChatSession session);
+        void onSessionLongClick(ChatSession session);
     }
 
     private final List<ChatSession> sessions;
@@ -53,12 +54,15 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
                 active ? R.color.notemind_chip : android.R.color.transparent);
 
         holder.itemView.setOnClickListener(v -> listener.onSessionClick(session));
+
+        holder.itemView.setOnLongClickListener(v -> {
+            listener.onSessionLongClick(session);
+            return true;
+        });
     }
 
     @Override
-    public int getItemCount() {
-        return sessions.size();
-    }
+    public int getItemCount() { return sessions.size(); }
 
     static class SessionVH extends RecyclerView.ViewHolder {
         final TextView title;
@@ -66,7 +70,7 @@ public class SessionAdapter extends RecyclerView.Adapter<SessionAdapter.SessionV
 
         SessionVH(@NonNull View v) {
             super(v);
-            title = v.findViewById(R.id.sessionTitle);
+            title   = v.findViewById(R.id.sessionTitle);
             preview = v.findViewById(R.id.sessionPreview);
         }
     }

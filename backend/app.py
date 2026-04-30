@@ -8,10 +8,22 @@ from database import (
     delete_session,
     save_chat_message,
     get_total_usage,
+    list_notes_full,
+    list_notes_by_lecture,
+    get_note_by_id,
+    create_course,
+    list_courses,
+    get_course,
+    delete_course,
+    create_lecture,
+    list_lectures,
+    get_lecture,
+    delete_lecture,
 )
 from services.ai_service import generate_answer, summarize_recording
 from services.ocr_service import extract_text
 from services.embedding_service import embed_and_store
+from services.ppt_service import extract_and_summarize
 
 app = Flask(__name__)
 
@@ -21,6 +33,16 @@ def ensure_database():
     init_db()
 
 
+def _lecture_id_from(payload: dict):
+    raw = payload.get("lecture_id")
+    if raw in (None, "", "null"):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 # ── Health ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
@@ -28,15 +50,94 @@ def health():
     return jsonify({"status": "ok", "service": "NoteMind backend"})
 
 
+# ── Courses ───────────────────────────────────────────────────────────────────
+
+@app.get("/api/courses")
+def courses_list():
+    return jsonify(list_courses())
+
+
+@app.post("/api/courses")
+def courses_create():
+    payload = request.get_json(silent=True) or {}
+    title = (payload.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "title required"}), 400
+    course_id = create_course(
+        title,
+        (payload.get("description") or "").strip(),
+        (payload.get("schedule") or "").strip(),
+    )
+    return jsonify(get_course(course_id)), 201
+
+
+@app.get("/api/courses/<int:course_id>")
+def courses_detail(course_id: int):
+    course = get_course(course_id)
+    if course is None:
+        return jsonify({"error": "Course not found"}), 404
+    course["lectures"] = list_lectures(course_id)
+    return jsonify(course)
+
+
+@app.delete("/api/courses/<int:course_id>")
+def courses_delete(course_id: int):
+    delete_course(course_id)
+    return jsonify({"status": "deleted"})
+
+
+# ── Lectures ──────────────────────────────────────────────────────────────────
+
+@app.get("/api/courses/<int:course_id>/lectures")
+def lectures_list(course_id: int):
+    return jsonify(list_lectures(course_id))
+
+
+@app.post("/api/courses/<int:course_id>/lectures")
+def lectures_create(course_id: int):
+    payload = request.get_json(silent=True) or {}
+    if get_course(course_id) is None:
+        return jsonify({"error": "Course not found"}), 404
+    lecture = create_lecture(
+        course_id,
+        (payload.get("title") or "").strip(),
+        (payload.get("lecture_date") or "").strip(),
+    )
+    return jsonify(lecture), 201
+
+
+@app.get("/api/lectures/<int:lecture_id>")
+def lectures_detail(lecture_id: int):
+    lecture = get_lecture(lecture_id)
+    if lecture is None:
+        return jsonify({"error": "Lecture not found"}), 404
+    lecture["notes"] = list_notes_by_lecture(lecture_id)
+    return jsonify(lecture)
+
+
+@app.delete("/api/lectures/<int:lecture_id>")
+def lectures_delete(lecture_id: int):
+    delete_lecture(lecture_id)
+    return jsonify({"status": "deleted"})
+
+
+@app.get("/api/lectures/<int:lecture_id>/notes")
+def lectures_notes(lecture_id: int):
+    return jsonify(list_notes_by_lecture(lecture_id))
+
+
 # ── Recording ─────────────────────────────────────────────────────────────────
 
 @app.post("/api/recording/summarize")
 def recording_summary():
     payload = request.get_json(silent=True) or {}
+    lecture_id = _lecture_id_from(payload)
     result = summarize_recording(payload)
-    note_id = save_note("recording", result["title"], result["summary"])
+    note_id = save_note("recording", result["title"], result["summary"], lecture_id)
     if result.get("transcript"):
         embed_and_store(result["transcript"], "recording", note_id)
+    result["note_id"] = note_id
+    result["lecture_id"] = lecture_id
     return jsonify(result)
 
 
@@ -45,10 +146,28 @@ def recording_summary():
 @app.post("/api/ocr")
 def photo_ocr():
     payload = request.get_json(silent=True) or {}
+    lecture_id = _lecture_id_from(payload)
     result = extract_text(payload)
-    note_id = save_note("ocr", result["title"], result["text"])
+    note_id = save_note("ocr", result["title"], result["text"], lecture_id)
     if result.get("text"):
         embed_and_store(result["text"], "ocr", note_id)
+    result["note_id"] = note_id
+    result["lecture_id"] = lecture_id
+    return jsonify(result)
+
+
+# ── PPT / PDF Analysis ────────────────────────────────────────────────────────
+
+@app.post("/api/ppt/analyze")
+def ppt_analyze():
+    payload = request.get_json(silent=True) or {}
+    lecture_id = _lecture_id_from(payload)
+    result = extract_and_summarize(payload)
+    note_id = save_note("ppt", result["title"], result["summary"] or result["text"], lecture_id)
+    if result.get("text"):
+        embed_and_store(result["text"], "ppt", note_id)
+    result["note_id"] = note_id
+    result["lecture_id"] = lecture_id
     return jsonify(result)
 
 
@@ -60,7 +179,6 @@ def knowledge_base_answer():
     question = payload.get("question", "")
     session_id = payload.get("session_id", "default")
 
-    # Persist messages to DB
     if question:
         save_chat_message(session_id, "user", question)
 
@@ -70,6 +188,22 @@ def knowledge_base_answer():
         save_chat_message(session_id, "assistant", result["answer"])
 
     return jsonify(result)
+
+
+# ── Notes ─────────────────────────────────────────────────────────────────────
+
+@app.get("/api/notes")
+def get_notes():
+    limit = int(request.args.get("limit", 30))
+    return jsonify(list_notes_full(limit))
+
+
+@app.get("/api/notes/<int:note_id>")
+def get_note(note_id: int):
+    note = get_note_by_id(note_id)
+    if note is None:
+        return jsonify({"error": "Note not found"}), 404
+    return jsonify(note)
 
 
 # ── Chat Sessions ─────────────────────────────────────────────────────────────

@@ -21,15 +21,39 @@ def _client():
 
 
 def summarize_recording(payload: dict) -> dict:
+    import base64
+    import os
+    import tempfile
+
     from config import CHAT_MODEL
     from services.transcription_service import transcribe_audio
 
     lecture_title = payload.get("title") or "Uploaded Lecture"
     audio_path = payload.get("audio_path", "")
+    audio_b64 = payload.get("audio_b64", "")
+    audio_format = payload.get("audio_format", "m4a")
     transcript = payload.get("transcript", "")
 
-    # If a file path is provided but no transcript yet, transcribe first
-    if audio_path and not transcript:
+    # Decode base64 audio to a temp file, then transcribe
+    if audio_b64 and not transcript:
+        audio_data = base64.b64decode(audio_b64)
+        suffix = f".{audio_format.lstrip('.')}"
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as f:
+                f.write(audio_data)
+                tmp_path = f.name
+            transcript = transcribe_audio(tmp_path)
+        except Exception as exc:
+            log.error("audio_b64 transcription failed: %s", exc)
+            transcript = f"Transcription failed: {exc}"
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+    elif audio_path and not transcript:
         transcript = transcribe_audio(audio_path)
 
     if not transcript:
