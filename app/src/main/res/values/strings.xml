@@ -1,0 +1,25 @@
+<resources>
+    <string name="app_name">NoteMind</string>
+    <string name="app_tagline">AI-powered smart learning assistant</string>
+    <string name="home_intro">Turn English lecture recordings, slide photos, and personal notes into structured summaries and searchable knowledge.</string>
+    <string name="recording_module">Recording Summary</string>
+    <string name="ocr_module">Photo-to-Text OCR</string>
+    <string name="kb_module">Knowledge Q&amp;A</string>
+    <string name="library_module">Notes Library</string>
+    <string name="chat_module">AI Study Chat</string>
+    <string name="selected_module">Selected Module</string>
+    <string name="demo_result">Demo Result</string>
+    <string name="ask_placeholder">Ask about your own notes, e.g. What is dynamic programming?</string>
+    <string name="ask_notemind">Ask NoteMind</string>
+    <string name="new_chat">New Chat</string>
+    <string name="recent_chats">Recent Chats</string>
+    <string name="profile">Profile</string>
+    <string name="account">Account</string>
+    <string name="backend_section">Backend</string>
+    <string name="api_usage">API Usage</string>
+    <string name="save_changes">Save Changes</string>
+    <string name="display_name_hint">Display Name</string>
+    <string name="email_hint">Email</string>
+    <string name="backend_url_hint">Backend Server URL</string>
+    <string name="fab_chat_desc">Open AI Chat</string>
+</resources>

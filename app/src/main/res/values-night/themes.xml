@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.COMP7506_project" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/notemind_primary</item>
+        <item name="colorSecondary">@color/notemind_accent</item>
+    </style>
+</resources>

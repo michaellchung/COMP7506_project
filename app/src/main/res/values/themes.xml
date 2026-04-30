@@ -1,0 +1,15 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme. -->
+    <style name="Base.Theme.COMP7506_project" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/notemind_primary</item>
+        <item name="colorPrimaryContainer">@color/notemind_surface</item>
+        <item name="colorSecondary">@color/notemind_accent</item>
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:statusBarColor">@color/notemind_surface</item>
+        <item name="android:navigationBarColor">@color/notemind_surface</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="Theme.COMP7506_project" parent="Base.Theme.COMP7506_project" />
+</resources>
