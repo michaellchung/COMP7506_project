@@ -361,5 +361,16 @@
             app:backgroundTint="@color/notemind_text_primary"
             app:cornerRadius="26dp" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLogout"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="12dp"
+            android:text="Sign Out"
+            android:textColor="#FF3B30"
+            app:cornerRadius="12dp"
+            app:strokeColor="#FF3B30" />
+
     </LinearLayout>
 </ScrollView>

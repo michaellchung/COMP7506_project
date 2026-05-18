@@ -1,6 +1,7 @@
 package hk.hkucs.comp7506_project;
 
 import android.content.SharedPreferences;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.ImageButton;
 import android.widget.ProgressBar;
@@ -23,6 +24,7 @@ import java.util.Locale;
 
 import hk.hkucs.comp7506_project.data.BackendConfig;
 import hk.hkucs.comp7506_project.data.SessionManager;
+import hk.hkucs.comp7506_project.data.AuthManager;
 
 public class ProfileActivity extends AppCompatActivity {
 
@@ -87,8 +89,8 @@ public class ProfileActivity extends AppCompatActivity {
     }
 
     private void loadProfile() {
-        String name  = prefs.getString("display_name", "Student");
-        String email = prefs.getString("email", "hku@connect.hku.hk");
+        String name  = prefs.getString("display_name", AuthManager.get(this).getUsername());
+        String email = prefs.getString("email", AuthManager.get(this).getEmail());
         String url   = BackendConfig.normalize(prefs.getString("backend_url", BackendConfig.DEFAULT_BACKEND));
 
         inputDisplayName.setText(name);
@@ -146,6 +148,15 @@ public class ProfileActivity extends AppCompatActivity {
 
         MaterialButton btnSave = findViewById(R.id.btnSaveProfile);
         btnSave.setOnClickListener(v -> saveProfile());
+
+        MaterialButton btnLogout = findViewById(R.id.btnLogout);
+        btnLogout.setOnClickListener(v -> {
+            AuthManager.get(this).logout();
+            Intent intent = new Intent(this, LoginActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(intent);
+            finish();
+        });
     }
 
     private void saveProfile() {

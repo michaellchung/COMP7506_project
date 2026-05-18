@@ -19,6 +19,13 @@ from database import (
     list_lectures,
     get_lecture,
     delete_lecture,
+    create_user,
+    get_user_by_email,
+    email_exists,
+    create_auth_token,
+    get_user_by_token,
+    delete_auth_token,
+    verify_password,
 )
 from services.ai_service import generate_answer, summarize_recording
 from services.ocr_service import extract_text
@@ -42,6 +49,64 @@ def _lecture_id_from(payload: dict):
     except (TypeError, ValueError):
         return None
 
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@app.post("/api/register")
+def auth_register():
+    payload  = request.get_json(silent=True) or {}
+    username = (payload.get("username") or "").strip()
+    email    = (payload.get("email")    or "").strip().lower()
+    password = (payload.get("password") or "").strip()
+
+    if not username:
+        return jsonify({"error": "username required"}), 400
+    if not email or "@" not in email:
+        return jsonify({"error": "valid email required"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "password must be at least 6 characters"}), 400
+    if email_exists(email):
+        return jsonify({"error": "email already registered"}), 409
+
+    user_id = create_user(username, email, password)
+    token   = create_auth_token(user_id)
+    return jsonify({
+        "token":    token,
+        "user_id":  user_id,
+        "username": username,
+        "email":    email,
+    }), 201
+
+
+@app.post("/api/login")
+def auth_login():
+    payload  = request.get_json(silent=True) or {}
+    email    = (payload.get("email")    or "").strip().lower()
+    password = (payload.get("password") or "").strip()
+
+    if not email or not password:
+        return jsonify({"error": "email and password required"}), 400
+
+    user = get_user_by_email(email)
+    if user is None or not verify_password(password, user["password"]):
+        return jsonify({"error": "invalid email or password"}), 401
+
+    token = create_auth_token(user["id"])
+    return jsonify({
+        "token":    token,
+        "user_id":  user["id"],
+        "username": user["username"],
+        "email":    user["email"],
+    })
+
+
+
+@app.post("/api/logout")
+def auth_logout():
+    token = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    if token:
+        delete_auth_token(token)
+    return jsonify({"status": "ok"})
 
 # ── Health ────────────────────────────────────────────────────────────────────
 

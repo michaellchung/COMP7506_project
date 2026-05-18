@@ -66,6 +66,20 @@ def init_db():
                 output_tokens INTEGER DEFAULT 0,
                 created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+	    CREATE TABLE IF NOT EXISTS users (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                username    TEXT NOT NULL,
+                email       TEXT NOT NULL UNIQUE,
+                password    TEXT NOT NULL,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS auth_tokens (
+                token       TEXT PRIMARY KEY,
+                user_id     INTEGER NOT NULL,
+                created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
             """
         )
         # Best-effort migration: add lecture_id to existing notes table
@@ -215,7 +229,7 @@ def delete_lecture(lecture_id: int):
 
 # ── Notes ────────────────────────────────────────────────────────────────────
 
-def save_note(source_type, title, content, lecture_id: int | None = None):
+def save_note(source_type, title, content, lecture_id: object = None):
     with get_connection() as conn:
         cursor = conn.execute(
             "INSERT INTO notes (source_type, title, content, lecture_id) VALUES (?, ?, ?, ?)",
@@ -371,3 +385,90 @@ def get_total_usage():
         "total_tokens": int(row[1] or 0),
         "total_sessions": sessions,
     }
+import uuid
+import hashlib
+
+
+def _hash_password(password: str) -> str:
+    """Simple SHA-256 hash.  For production use bcrypt/argon2."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
+# ── Users ─────────────────────────────────────────────────────────────────────
+
+def create_user(username: str, email: str, password: str) -> int:
+    hashed = _hash_password(password)
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "INSERT INTO users (username, email, password) VALUES (?, ?, ?)",
+            (username, email, hashed),
+        )
+        conn.commit()
+        return cursor.lastrowid
+
+
+def get_user_by_email(email: str) -> object:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, username, email, password FROM users WHERE email = ?",
+            (email,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"id": row[0], "username": row[1], "email": row[2], "password": row[3]}
+
+
+def get_user_by_id(user_id: int) -> object:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, username, email FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"id": row[0], "username": row[1], "email": row[2]}
+
+
+def email_exists(email: str) -> bool:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM users WHERE email = ?", (email,)
+        ).fetchone()
+    return row is not None
+
+
+# ── Auth tokens ───────────────────────────────────────────────────────────────
+
+def create_auth_token(user_id: int) -> str:
+    token = str(uuid.uuid4())
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO auth_tokens (token, user_id) VALUES (?, ?)",
+            (token, user_id),
+        )
+        conn.commit()
+    return token
+
+
+def get_user_by_token(token: str) -> object:
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT u.id, u.username, u.email
+               FROM auth_tokens t
+               JOIN users u ON u.id = t.user_id
+               WHERE t.token = ?""",
+            (token,),
+        ).fetchone()
+    if row is None:
+        return None
+    return {"id": row[0], "username": row[1], "email": row[2]}
+
+
+def delete_auth_token(token: str) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM auth_tokens WHERE token = ?", (token,))
+        conn.commit()
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return _hash_password(plain) == hashed
