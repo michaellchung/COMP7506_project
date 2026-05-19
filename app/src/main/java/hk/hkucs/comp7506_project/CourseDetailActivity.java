@@ -97,10 +97,12 @@ public class CourseDetailActivity extends AppCompatActivity {
 
     private void bindActions() {
         ImageButton btnBack          = findViewById(R.id.btnBack);
+        ImageButton btnAskCourse     = findViewById(R.id.btnAskCourse);
         ImageButton btnDelete        = findViewById(R.id.btnDeleteCourse);
         MaterialButton btnNewLecture = findViewById(R.id.btnNewLecture);
 
         btnBack.setOnClickListener(v -> finish());
+        btnAskCourse.setOnClickListener(v -> openCourseChat());
         btnDelete.setOnClickListener(v -> confirmDeleteCourse());
         btnNewLecture.setOnClickListener(v -> showCreateLectureDialog());
     }
@@ -243,6 +245,13 @@ public class CourseDetailActivity extends AppCompatActivity {
         intent.putExtra(LectureDetailActivity.EXTRA_LECTURE_NUMBER, lec.getLectureNumber());
         intent.putExtra(LectureDetailActivity.EXTRA_COURSE_TITLE,   courseTitle);
         intent.putExtra(LectureDetailActivity.EXTRA_LECTURE_DATE,   lec.getLectureDate());
+        startActivity(intent);
+    }
+
+    private void openCourseChat() {
+        Intent intent = new Intent(this, ChatActivity.class);
+        intent.putExtra(ChatActivity.EXTRA_COURSE_ID, courseId);
+        intent.putExtra(ChatActivity.EXTRA_COURSE_TITLE, courseTitle);
         startActivity(intent);
     }
 
