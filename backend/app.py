@@ -40,14 +40,30 @@ def ensure_database():
     init_db()
 
 
-def _lecture_id_from(payload: dict):
-    raw = payload.get("lecture_id")
+def _positive_int_from(payload: dict, key: str):
+    raw = payload.get(key)
     if raw in (None, "", "null"):
         return None
     try:
-        return int(raw)
+        value = int(raw)
     except (TypeError, ValueError):
         return None
+    return value if value > 0 else None
+
+
+def _lecture_id_from(payload: dict):
+    return _positive_int_from(payload, "lecture_id")
+
+
+def _course_id_from(payload: dict):
+    return _positive_int_from(payload, "course_id")
+
+
+def _course_id_for_lecture(lecture_id: object):
+    if lecture_id is None:
+        return None
+    lecture = get_lecture(lecture_id)
+    return lecture["course_id"] if lecture else None
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -197,12 +213,16 @@ def lectures_notes(lecture_id: int):
 def recording_summary():
     payload = request.get_json(silent=True) or {}
     lecture_id = _lecture_id_from(payload)
+    course_id = _course_id_for_lecture(lecture_id)
+    if lecture_id and course_id is None:
+        return jsonify({"error": "Lecture not found"}), 404
     result = summarize_recording(payload)
     note_id = save_note("recording", result["title"], result["summary"], lecture_id)
     if result.get("transcript"):
-        embed_and_store(result["transcript"], "recording", note_id)
+        embed_and_store(result["transcript"], "recording", note_id, course_id=course_id, lecture_id=lecture_id)
     result["note_id"] = note_id
     result["lecture_id"] = lecture_id
+    result["course_id"] = course_id
     return jsonify(result)
 
 
@@ -212,12 +232,16 @@ def recording_summary():
 def photo_ocr():
     payload = request.get_json(silent=True) or {}
     lecture_id = _lecture_id_from(payload)
+    course_id = _course_id_for_lecture(lecture_id)
+    if lecture_id and course_id is None:
+        return jsonify({"error": "Lecture not found"}), 404
     result = extract_text(payload)
     note_id = save_note("ocr", result["title"], result["text"], lecture_id)
     if result.get("text"):
-        embed_and_store(result["text"], "ocr", note_id)
+        embed_and_store(result["text"], "ocr", note_id, course_id=course_id, lecture_id=lecture_id)
     result["note_id"] = note_id
     result["lecture_id"] = lecture_id
+    result["course_id"] = course_id
     return jsonify(result)
 
 
@@ -227,12 +251,16 @@ def photo_ocr():
 def ppt_analyze():
     payload = request.get_json(silent=True) or {}
     lecture_id = _lecture_id_from(payload)
+    course_id = _course_id_for_lecture(lecture_id)
+    if lecture_id and course_id is None:
+        return jsonify({"error": "Lecture not found"}), 404
     result = extract_and_summarize(payload)
     note_id = save_note("ppt", result["title"], result["summary"] or result["text"], lecture_id)
     if result.get("text"):
-        embed_and_store(result["text"], "ppt", note_id)
+        embed_and_store(result["text"], "ppt", note_id, course_id=course_id, lecture_id=lecture_id)
     result["note_id"] = note_id
     result["lecture_id"] = lecture_id
+    result["course_id"] = course_id
     return jsonify(result)
 
 
@@ -243,11 +271,23 @@ def knowledge_base_answer():
     payload = request.get_json(silent=True) or {}
     question = payload.get("question", "")
     session_id = payload.get("session_id", "default")
+    course_id = _course_id_from(payload)
+    lecture_id = _lecture_id_from(payload)
+
+    if lecture_id:
+        lecture = get_lecture(lecture_id)
+        if lecture is None:
+            return jsonify({"error": "Lecture not found"}), 404
+        if course_id and lecture["course_id"] != course_id:
+            return jsonify({"error": "lecture_id does not belong to course_id"}), 400
+        course_id = course_id or lecture["course_id"]
+    elif course_id and get_course(course_id) is None:
+        return jsonify({"error": "Course not found"}), 404
 
     if question:
         save_chat_message(session_id, "user", question)
 
-    result = generate_answer(question, session_id)
+    result = generate_answer(question, session_id, course_id=course_id, lecture_id=lecture_id)
 
     if result.get("answer"):
         save_chat_message(session_id, "assistant", result["answer"])
