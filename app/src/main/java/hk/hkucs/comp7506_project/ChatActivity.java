@@ -39,6 +39,9 @@ import hk.hkucs.comp7506_project.ui.SessionAdapter;
 
 public class ChatActivity extends AppCompatActivity {
 
+    public static final String EXTRA_COURSE_ID    = "course_id";
+    public static final String EXTRA_COURSE_TITLE = "course_title";
+
     private DrawerLayout drawerLayout;
     private TextView sessionTitleText;
     private RecyclerView messagesRecyclerView;
@@ -55,6 +58,8 @@ public class ChatActivity extends AppCompatActivity {
 
     private RequestQueue requestQueue;
     private String backendUrl;
+    private int courseId = -1;
+    private String courseTitle = "";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -63,6 +68,9 @@ public class ChatActivity extends AppCompatActivity {
 
         backendUrl   = BackendConfig.getUrl(this);
         requestQueue = Volley.newRequestQueue(this);
+        courseId     = getIntent().getIntExtra(EXTRA_COURSE_ID, -1);
+        courseTitle  = getIntent().getStringExtra(EXTRA_COURSE_TITLE);
+        if (courseTitle == null) courseTitle = "";
 
         sessionManager = new SessionManager(this);
         sessions = sessionManager.loadSessions();
@@ -86,6 +94,9 @@ public class ChatActivity extends AppCompatActivity {
         messagesRecyclerView = findViewById(R.id.messagesRecyclerView);
         sessionsRecyclerView = findViewById(R.id.sessionsRecyclerView);
         chatInput            = findViewById(R.id.chatInput);
+        if (courseId > 0 && !courseTitle.isEmpty()) {
+            chatInput.setHint("Ask about " + courseTitle);
+        }
     }
 
     private void initSessions() {
@@ -229,6 +240,9 @@ public class ChatActivity extends AppCompatActivity {
             JSONObject payload = new JSONObject();
             payload.put("question",   question);
             payload.put("session_id", currentSession.getId());
+            if (courseId > 0) {
+                payload.put("course_id", courseId);
+            }
 
             JsonObjectRequest req = new JsonObjectRequest(
                     Request.Method.POST,
