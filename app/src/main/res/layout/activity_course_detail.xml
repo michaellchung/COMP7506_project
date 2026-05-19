@@ -39,6 +39,15 @@
             tools:text="COMP7506" />
 
         <ImageButton
+            android:id="@+id/btnAskCourse"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/ask_this_course"
+            android:src="@drawable/ic_chat"
+            app:tint="@color/notemind_text_secondary" />
+
+        <ImageButton
             android:id="@+id/btnDeleteCourse"
             android:layout_width="40dp"
             android:layout_height="40dp"
