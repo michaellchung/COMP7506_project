@@ -295,13 +295,72 @@ def get_note_by_id(note_id: int):
     return None
 
 
-def list_recent_notes(limit=5):
+def get_note_scope(note_id: int):
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT n.id, n.lecture_id, l.course_id
+            FROM notes n
+            LEFT JOIN lectures l ON l.id = n.lecture_id
+            WHERE n.id = ?
+            """,
+            (note_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "note_id": row[0],
+        "lecture_id": row[1],
+        "course_id": row[2],
+    }
+
+
+def note_matches_scope(note_id: int, course_id: object = None, lecture_id: object = None) -> bool:
+    scope = get_note_scope(note_id)
+    if scope is None:
+        return False
+    if lecture_id is not None and scope["lecture_id"] != lecture_id:
+        return False
+    if course_id is not None and scope["course_id"] != course_id:
+        return False
+    return True
+
+
+def list_recent_notes(limit=5, course_id: object = None, lecture_id: object = None):
+    filters = []
+    params = []
+    if lecture_id is not None:
+        filters.append("n.lecture_id = ?")
+        params.append(lecture_id)
+    if course_id is not None:
+        filters.append("l.course_id = ?")
+        params.append(course_id)
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+    params.append(limit)
+
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT source_type, title, content FROM notes ORDER BY created_at DESC LIMIT ?",
-            (limit,),
+            f"""
+            SELECT n.id, n.source_type, n.title, n.content, n.lecture_id, l.course_id
+            FROM notes n
+            LEFT JOIN lectures l ON l.id = n.lecture_id
+            {where}
+            ORDER BY n.created_at DESC
+            LIMIT ?
+            """,
+            params,
         ).fetchall()
-    return [{"source_type": r[0], "title": r[1], "content": r[2]} for r in rows]
+    return [
+        {
+            "id": r[0],
+            "source_type": r[1],
+            "title": r[2],
+            "content": r[3],
+            "lecture_id": r[4],
+            "course_id": r[5],
+        }
+        for r in rows
+    ]
 
 
 # ── Chat sessions ─────────────────────────────────────────────────────────────
