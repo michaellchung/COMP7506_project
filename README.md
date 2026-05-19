@@ -25,13 +25,15 @@
 ### 2. AI 知识库问答系统
 
 - **快速入口**：主页右下角悬浮按钮，点击全屏进入对话界面
+- **课程内问答入口**：课程详情页提供聊天按钮，进入后自动携带当前课程范围
 - **会话管理**：左侧边栏支持新建会话、切换历史会话、长按删除会话
 - **RAG 检索**：基于向量数据库实现检索增强生成，回答结合课程笔记内容
+- **课程级知识库隔离**：上传内容入库时会关联 `course_id` / `lecture_id`，问答检索时优先按课程或课时过滤，避免不同课程资料混合检索
+- **SQLite 降级检索**：Milvus 不可用时，后端会退回 SQLite 笔记检索，并继续按课程 / 课时范围过滤
 
 > **待改进**：
 > - 缺乏模型熔断机制，单一模型故障时无法自动降级
 > - 未对用户问题进行意图分析，无法区分闲聊与知识查询
-> - 知识库未按课程隔离，所有内容混合检索，精准度受限
 
 ---
 
@@ -56,8 +58,19 @@
 | 移动端 | Android (Java), Material Design |
 | 后端 | Python, Flask, SQLite |
 | AI / LLM | OpenRouter API (GPT-4o, GPT-4o-mini), OpenAI Embedding |
-| 向量数据库 | Milvus |
+| 向量数据库 | Milvus（支持按 `course_id` / `lecture_id` 进行范围过滤） |
 | 部署 | Docker Compose (Milvus + etcd + MinIO) |
+
+---
+
+## 课程级 RAG 检索流程
+
+1. 用户在某门课程的课时中录音、拍照 OCR、上传图片或上传 PPT/PDF。
+2. 后端将处理结果保存为笔记，并从 `lecture_id` 反查所属 `course_id`。
+3. 文本被分块后生成 Embedding，并与 `source_type`、`note_id`、`course_id`、`lecture_id` 一起写入 Milvus。
+4. 用户从课程详情页进入 AI Chat 时，Android 客户端会把 `course_id` 传给 `/api/kb/ask`。
+5. 后端向量检索时使用课程 / 课时过滤条件，只把当前范围内的笔记片段提供给大模型生成答案。
+6. 如果 Milvus 不可用，则使用 SQLite fallback，但仍按 `course_id` / `lecture_id` 过滤，避免回到全局混合检索。
 
 ---
 
@@ -110,7 +123,7 @@ COMP7506_project/
 - [ ] 接入 OpenAI Whisper 替代现有音频模型
 - [ ] 多模型熔断与自动降级机制
 - [ ] 用户意图识别与路由
-- [ ] 课程级知识库隔离与权限控制
+- [x] 课程级知识库隔离
 - [x] 用户账户系统（登录 / 注册 / Token 鉴权 / 退出登录）
 
 ---
