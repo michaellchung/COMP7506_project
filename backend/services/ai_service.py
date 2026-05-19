@@ -94,7 +94,12 @@ def summarize_recording(payload: dict) -> dict:
     }
 
 
-def generate_answer(question: str, session_id: str = "default") -> dict:
+def generate_answer(
+    question: str,
+    session_id: str = "default",
+    course_id: object = None,
+    lecture_id: object = None,
+) -> dict:
     from config import CHAT_MODEL
     from database import list_recent_notes
     from services.embedding_service import get_embedding
@@ -107,29 +112,61 @@ def generate_answer(question: str, session_id: str = "default") -> dict:
     context_chunks: List[dict] = []
     try:
         query_embedding = get_embedding(question)
-        context_chunks = milvus_service.search(query_embedding, top_k=5)
+        context_chunks = milvus_service.search(
+            query_embedding,
+            top_k=5,
+            course_id=course_id,
+            lecture_id=lecture_id,
+        )
     except Exception as exc:
         log.warning("RAG retrieval failed, falling back to SQLite: %s", exc)
 
     # 2. Fallback to recent SQLite notes if Milvus is unavailable
     if context_chunks:
         context_text = "\n\n".join(
-            f"[{c['source_type']}] {c['text']}" for c in context_chunks
+            f"[{c.get('source_type')}] {c.get('text') or ''}" for c in context_chunks
         )
         sources = [
-            {"text": c["text"][:120], "source_type": c["source_type"], "score": c.get("score", 0)}
+            {
+                "text": (c.get("text") or "")[:120],
+                "source_type": c.get("source_type"),
+                "score": c.get("score", 0),
+                "note_id": c.get("note_id"),
+                "course_id": c.get("course_id"),
+                "lecture_id": c.get("lecture_id"),
+            }
             for c in context_chunks
         ]
     else:
-        notes = list_recent_notes(limit=5)
+        notes = list_recent_notes(limit=5, course_id=course_id, lecture_id=lecture_id)
         context_text = "\n\n".join(
             f"[{n['source_type']}] {n['title']}:\n{n['content']}" for n in notes
         )
-        sources = [{"title": n["title"], "source_type": n["source_type"]} for n in notes]
+        sources = [
+            {
+                "title": n["title"],
+                "source_type": n["source_type"],
+                "note_id": n.get("id"),
+                "course_id": n.get("course_id"),
+                "lecture_id": n.get("lecture_id"),
+            }
+            for n in notes
+        ]
+
+    if not context_text.strip():
+        scoped_name = "lecture" if lecture_id else "course" if course_id else "knowledge base"
+        return {
+            "answer": f"No notes found in this {scoped_name} yet. Upload lecture materials first, then ask again.",
+            "question": question,
+            "sources": [],
+            "course_id": course_id,
+            "lecture_id": lecture_id,
+        }
 
     system_prompt = (
         "You are NoteMind, a personal AI study assistant. "
         "Answer ONLY based on the student's own notes in the context below. "
+        "The context has already been filtered to the selected course or lecture when a scope is provided. "
         "If the answer is not in the context, say so clearly. "
         "Be concise and academically accurate."
     )
@@ -152,7 +189,13 @@ def generate_answer(question: str, session_id: str = "default") -> dict:
             f"Could not reach AI service. Please check your OPENROUTER_API_KEY in backend/.env.\n\nError: {exc}"
         )
 
-    return {"answer": answer, "question": question, "sources": sources}
+    return {
+        "answer": answer,
+        "question": question,
+        "sources": sources,
+        "course_id": course_id,
+        "lecture_id": lecture_id,
+    }
 
 
 def _track_usage(model: str, input_tokens: int, output_tokens: int, endpoint: str) -> None:
