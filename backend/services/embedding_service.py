@@ -38,16 +38,40 @@ def get_embedding(text: str) -> List[float]:
     return response.data[0].embedding
 
 
-def embed_and_store(text: str, source_type: str, note_id: int) -> bool:
+def embed_and_store(
+    text: str,
+    source_type: str,
+    note_id: int,
+    course_id: object = None,
+    lecture_id: object = None,
+) -> bool:
     """Chunk text, embed each chunk, and store in Milvus. Returns True on success."""
     try:
         from services import milvus_service
+
+        if course_id is None or lecture_id is None:
+            try:
+                from database import get_note_scope
+
+                scope = get_note_scope(note_id)
+                if scope:
+                    course_id = course_id if course_id is not None else scope["course_id"]
+                    lecture_id = lecture_id if lecture_id is not None else scope["lecture_id"]
+            except Exception as exc:
+                log.warning("Could not resolve note scope for embedding: %s", exc)
 
         chunks = chunk_text(text)
         if not chunks:
             return False
         embeddings = [get_embedding(c) for c in chunks]
-        return milvus_service.insert_chunks(chunks, source_type, note_id, embeddings)
+        return milvus_service.insert_chunks(
+            chunks,
+            source_type,
+            note_id,
+            embeddings,
+            course_id=course_id,
+            lecture_id=lecture_id,
+        )
     except Exception as exc:
         log.warning("embed_and_store failed: %s", exc)
         return False
