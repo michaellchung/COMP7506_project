@@ -17,6 +17,7 @@
     <string name="course_lectures">Lectures</string>
     <string name="new_lecture">New Lecture</string>
     <string name="no_lectures_yet">No lectures yet.\nAdd your first lecture for this course.</string>
+    <string name="ask_this_course">Ask this course</string>
     <string name="delete_course">Delete Course</string>
     <string name="confirm_delete_course">Delete this course and all its lectures and notes?</string>
 
